@@ -24,8 +24,8 @@ YELLOW_BG  = colors.HexColor("#fef9c3")
 RED        = colors.HexColor("#b91c1c")
 RED_BG     = colors.HexColor("#fee2e2")
 GREY_BG    = colors.HexColor("#f1f5f9")
-CODE_BG    = colors.HexColor("#0f172a")
-CODE_FG    = colors.HexColor("#e2e8f0")
+CODE_BG    = colors.HexColor("#f1f5f9")
+CODE_FG    = colors.HexColor("#1e293b")
 WHITE      = colors.white
 BLACK      = colors.black
 
@@ -50,7 +50,8 @@ h3       = S("h3",      fontSize=11, textColor=MID_BLUE, fontName="Helvetica-Bol
 body     = S("body",    fontSize=9.5, textColor=BLACK, fontName="Helvetica", leading=14, alignment=TA_JUSTIFY)
 bullet   = S("bullet",  fontSize=9.5, textColor=BLACK, fontName="Helvetica", leading=14, leftIndent=14, bulletIndent=4)
 code     = S("code",    fontSize=8.2, textColor=CODE_FG, fontName="Courier", leading=12, backColor=CODE_BG,
-              leftIndent=6, rightIndent=6, spaceBefore=2, spaceAfter=2)
+              leftIndent=8, rightIndent=6, spaceBefore=1, spaceAfter=1,
+              borderPadding=(3, 3, 3, 3))
 code_lbl = S("codelbl", fontSize=7.5, textColor=WHITE, fontName="Courier-Bold", leading=10,
               backColor=MID_BLUE, leftIndent=6)
 warn     = S("warn",    fontSize=9,   textColor=RED,    fontName="Helvetica-Bold", backColor=RED_BG,
@@ -843,9 +844,217 @@ qa(story, "How do you apply the Terraform config?",
 story.append(PageBreak())
 
 # ============================================================
-# SECTION 9 — kubectl commands cheat sheet
+# SECTION 9 — start_wildfire.ps1 walkthrough
 # ============================================================
-section_header(story, 9, "kubectl Commands — Demo Cheat Sheet", colors.HexColor("#0f4c81"))
+section_header(story, 9, "start_wildfire.ps1 — Startup Script Walkthrough", colors.HexColor("#166534"))
+
+story.append(Paragraph(
+    "Running <b>.\\start_wildfire.ps1</b> from the project root starts the entire environment "
+    "automatically. The script executes 7 sequential steps and exits only when the API is reachable.",
+    body))
+story.append(Spacer(1, 0.3*cm))
+
+code_block(story, "Run the startup script (from project root in PowerShell)", [
+    "cd C:\\Users\\surya\\OneDrive\\Desktop\\wildfire-detection",
+    ".\\start_wildfire.ps1",
+])
+
+story.append(Spacer(1, 0.3*cm))
+story.append(Paragraph("Step-by-Step Breakdown", h2))
+
+startup_steps = [
+    ("Step 1 — Start Docker Desktop",
+     "Checks if a process named 'Docker Desktop' is already running using Get-Process. "
+     "If not found, it launches Docker Desktop via Start-Process using the full .exe path. "
+     "This prevents opening duplicate Docker windows if it's already open.",
+     [
+         "$dockerProcess = Get-Process -Name 'Docker Desktop' -ErrorAction SilentlyContinue",
+         "if (-not $dockerProcess) { Start-Process $dockerDesktopPath }",
+     ]),
+    ("Step 2 — Wait for Docker engine",
+     "Polls 'docker version' in a loop up to 60 times (every 5 seconds = up to 5 minutes). "
+     "'docker version' only exits with code 0 when the Docker daemon is fully running. "
+     "If Docker never becomes ready it exits with code 1. This prevents the rest of the script "
+     "from running against a daemon that isn't up yet.",
+     [
+         "for ($i = 1; $i -le 60; $i++) {",
+         "    docker version *> $null",
+         "    if ($LASTEXITCODE -eq 0) { $dockerReady = $true; break }",
+         "    Start-Sleep -Seconds 5",
+         "}",
+     ]),
+    ("Step 3 — Navigate to project folder",
+     "Calls Set-Location (cd) to move into the project root. All subsequent relative paths "
+     "(.\\k8s\\deployment.yaml, .\\venv\\...) resolve from this directory.",
+     [
+         "Set-Location $projectPath",
+     ]),
+    ("Step 4 — Activate Python virtual environment",
+     "Runs the venv activation script so that python, pip, and locust commands use the "
+     "project's isolated packages instead of the system Python. If the venv folder is missing "
+     "the script exits with an error rather than silently using the wrong Python.",
+     [
+         "$venvActivate = Join-Path $projectPath 'venv\\Scripts\\Activate.ps1'",
+         "& $venvActivate",
+     ]),
+    ("Step 5 — Wait for Kubernetes cluster",
+     "Polls 'kubectl get nodes' up to 60 times (every 10 seconds = up to 10 minutes). "
+     "kubectl returns exit code 0 only when it can reach the Kubernetes API server. "
+     "For Docker Desktop's built-in K8s this means waiting for the control plane to boot. "
+     "The script then prints all nodes so you can confirm they are Ready.",
+     [
+         "for ($i = 1; $i -le 60; $i++) {",
+         "    kubectl get nodes *> $null",
+         "    if ($LASTEXITCODE -eq 0) { $kubeReady = $true; break }",
+         "    Start-Sleep -Seconds 10",
+         "}",
+         "kubectl get nodes   # prints node table",
+     ]),
+    ("Step 6 — Apply Kubernetes manifests + scale",
+     "Applies deployment.yaml (creates/updates the Deployment object) and service.yaml "
+     "(creates/updates the NodePort Service). Uses 'kubectl apply' not 'create' so the "
+     "command is idempotent — it works even if the resources already exist. "
+     "Then explicitly scales to 1 replica and waits 15 seconds for the pod to start "
+     "before checking status.",
+     [
+         "kubectl apply -f .\\k8s\\deployment.yaml",
+         "kubectl apply -f .\\k8s\\service.yaml",
+         "kubectl scale deployment wildfire-api --replicas=1",
+         "Start-Sleep -Seconds 15",
+     ]),
+    ("Step 7 — Show status and open docs",
+     "Runs kubectl get pods and kubectl get svc to print a final status table. "
+     "Then calls Start-Process to open the FastAPI Swagger UI in the default browser "
+     "at port 30080 (the NodePort). After this the script exits — "
+     "the API continues running in Kubernetes.",
+     [
+         "kubectl get pods",
+         "kubectl get svc",
+         "Start-Process 'http://127.0.0.1:30080/docs'",
+     ]),
+]
+
+for step_title, step_desc, step_code in startup_steps:
+    story.append(KeepTogether([
+        Paragraph(step_title, h3),
+        Paragraph(step_desc, body),
+        Spacer(1, 0.15*cm),
+    ]))
+    code_block(story, "", step_code)
+    story.append(Spacer(1, 0.25*cm))
+
+story.append(Paragraph("Interview Questions for start_wildfire.ps1", h2))
+qa(story, "Why does the script poll 'docker version' instead of just sleeping a fixed time?",
+   "A fixed sleep like Start-Sleep 30 is fragile — Docker Desktop might take 10 seconds on a fast machine or 90 seconds after a reboot. Polling with 'docker version' makes the script self-adapting: it proceeds the instant Docker is ready, no sooner and no later. The 5-second interval and 60-attempt ceiling prevent an infinite loop if Docker fails to start.")
+qa(story, "Why use 'kubectl apply' instead of 'kubectl create'?",
+   "kubectl create fails if the resource already exists (throws an AlreadyExists error). kubectl apply is declarative — it creates the resource if absent and updates it if present. This makes the script idempotent: running start_wildfire.ps1 a second time updates the deployment to whatever is in the YAML without errors.")
+qa(story, "What happens if the virtual environment is missing?",
+   "The script calls Test-Path on the venv activation script path. If it returns false, the script prints an error message and exits with code 1 immediately. It never reaches kubectl or Docker, preventing confusing errors from running the wrong Python version.")
+qa(story, "Why open 127.0.0.1:30080 and not localhost:8000?",
+   "Port 8000 is the port inside the container. The Kubernetes NodePort Service maps external port 30080 → internal port 8000. Accessing 30080 goes through the full K8s networking stack (Service → kube-proxy → pod), which is what we want to test. 127.0.0.1 works here because Docker Desktop's K8s exposes NodePorts on the local machine's loopback address.")
+
+story.append(PageBreak())
+
+# ============================================================
+# SECTION 9b — Why 6 effective cores not 8
+# ============================================================
+section_header(story, "9b", "Resource Planning — Why 6 Effective Cores, Not 8", colors.HexColor("#7c2d12"))
+
+story.append(Paragraph(
+    "This section explains the resource arithmetic behind the cluster setup and why only "
+    "<b>6 pods</b> can be reliably scheduled even though the 2 worker nodes have 8 vCPUs total.",
+    body))
+story.append(Spacer(1, 0.3*cm))
+
+story.append(Paragraph("VM Configuration", h2))
+vm_data = [
+    ["Node", "Role", "OCPUs", "RAM", "Schedulable for pods?"],
+    ["master-35415940", "K8s control plane", "4", "8 GB", "No — runs API server, etcd, scheduler"],
+    ["worker1-35415940", "Worker", "4", "8 GB", "Yes — minus ~1 CPU for OS/kubelet overhead"],
+    ["worker2-35415940", "Worker", "4", "8 GB", "Yes — minus ~1 CPU for OS/kubelet overhead"],
+]
+vt = Table(vm_data, colWidths=[3.8*cm, 3.5*cm, 1.5*cm, 1.5*cm, 5.1*cm])
+vt.setStyle(TableStyle([
+    ("BACKGROUND",    (0,0), (-1,0), DARK_BLUE),
+    ("TEXTCOLOR",     (0,0), (-1,0), WHITE),
+    ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+    ("FONTSIZE",      (0,0), (-1,-1), 8.5),
+    ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, GREY_BG]),
+    ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5e1")),
+    ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+    ("TOPPADDING",    (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("LEFTPADDING",   (0,0), (-1,-1), 5),
+]))
+story.append(vt)
+story.append(Spacer(1, 0.3*cm))
+
+story.append(Paragraph("The Core Arithmetic", h2))
+core_points = [
+    "<b>Total cluster OCPUs:</b> 3 nodes × 4 OCPUs = 12 OCPUs",
+    "<b>Master node OCPUs:</b> 4 OCPUs consumed entirely by control plane components — kube-apiserver, etcd (the cluster database), kube-scheduler, kube-controller-manager. No application pods are scheduled here.",
+    "<b>Worker node raw capacity:</b> 2 workers × 4 OCPUs = 8 OCPUs",
+    "<b>System overhead per worker:</b> ~1 OCPU is permanently reserved by the Linux OS kernel, kubelet (the node agent), kube-proxy (network rules), and Flannel (the CNI overlay network daemon). These run as system daemons on every node.",
+    "<b>Effective schedulable CPUs:</b> 2 workers × (4 − 1 overhead) = <b>6 vCPUs available for application pods</b>",
+    "<b>Pod limit:</b> Each pod requests and is limited to exactly 1 vCPU (set in deployment.yaml). Kubernetes will not schedule a pod on a node where CPU requests would exceed available CPU. With 6 schedulable vCPUs, a maximum of 6 pods can be reliably scheduled without resource pressure.",
+]
+for pt in core_points:
+    story.append(Paragraph(f"• {pt}", bullet))
+    story.append(Spacer(1, 0.1*cm))
+
+story.append(Spacer(1, 0.2*cm))
+story.append(Paragraph("Why Not Use More OCPUs Per VM?", h2))
+story.append(Paragraph(
+    "The assignment specification explicitly requires VMs with <b>4 cores and 8 GB RAM</b> each. "
+    "Using larger VMs would exceed the assignment constraints and invalidate the benchmarking "
+    "comparison — results would not be reproducible by the marker. The 4-core constraint is "
+    "also mathematically important: with each pod capped at 1 vCPU, it creates a clean "
+    "linear relationship between pod count and theoretical throughput, making the "
+    "performance graphs interpretable.",
+    body))
+
+story.append(Spacer(1, 0.3*cm))
+story.append(Paragraph("Impact on the Benchmark Experiment", h2))
+bench_data = [
+    ["Pod Count", "vCPUs used", "Headroom left", "Expected behaviour"],
+    ["1 pod",  "1 / 6", "5 free",  "Low load, plenty of headroom, low latency"],
+    ["2 pods", "2 / 6", "4 free",  "Still comfortable, near-linear throughput gain"],
+    ["4 pods", "4 / 6", "2 free",  "Good throughput, minor contention with system daemons"],
+    ["6 pods", "6 / 6", "0 free",  "Fully saturated — any new pod goes Pending"],
+    ["8 pods", "8 / 6", "OVER",    "2 pods stay Pending; cluster cannot schedule them without evicting system daemons"],
+]
+bt = Table(bench_data, colWidths=[1.8*cm, 2.2*cm, 2.2*cm, 9.2*cm])
+bt.setStyle(TableStyle([
+    ("BACKGROUND",    (0,0), (-1,0), DARK_BLUE),
+    ("TEXTCOLOR",     (0,0), (-1,0), WHITE),
+    ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+    ("FONTSIZE",      (0,0), (-1,-1), 8.5),
+    ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, GREY_BG]),
+    ("BACKGROUND",    (0,5), (-1,5), RED_BG),
+    ("BACKGROUND",    (0,4), (-1,4), YELLOW_BG),
+    ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5e1")),
+    ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+    ("TOPPADDING",    (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("LEFTPADDING",   (0,0), (-1,-1), 5),
+]))
+story.append(bt)
+
+story.append(Spacer(1, 0.3*cm))
+story.append(Paragraph("Interview Questions for Resource Planning", h2))
+qa(story, "Why can you only reliably run 6 pods if you have 8 worker vCPUs?",
+   "The 2 worker nodes each have 4 OCPUs, giving 8 raw worker vCPUs. However, approximately 1 vCPU per worker is permanently consumed by system-level processes: the kubelet node agent, kube-proxy for iptables network rules, the Flannel CNI daemon for overlay networking, and the Linux kernel itself. Kubernetes tracks this as 'allocatable' CPU which is less than 'capacity'. With 2 × (4 - 1) = 6 allocatable vCPUs and each pod requesting 1 vCPU, a maximum of 6 pods can be scheduled before the scheduler marks new pods as Pending.")
+qa(story, "What happens when you try to schedule 8 pods?",
+   "Kubernetes schedules as many pods as the allocatable CPU allows — up to 6. The remaining 2 pods stay in Pending state. kubectl get pods will show them as Pending. kubectl describe pod <pending-pod> shows a 'Insufficient cpu' event in the Events section. The 6 running pods still serve traffic normally; the 2 pending ones simply never start.")
+qa(story, "Why set CPU requests equal to CPU limits (both = '1')?",
+   "When requests equal limits, Kubernetes assigns the pod QoS class 'Guaranteed'. The pod is never CPU-throttled below its limit and is the last to be evicted under node pressure. This gives predictable, consistent performance for benchmarking. If limits were higher than requests, the pod could burst and interfere with neighbours, making latency measurements unreliable.")
+
+story.append(PageBreak())
+
+# ============================================================
+# SECTION 10 (renumbered) — kubectl commands cheat sheet
+# ============================================================
+section_header(story, 10, "kubectl Commands — Demo Cheat Sheet", colors.HexColor("#0f4c81"))
 
 story.append(Paragraph(
     "Commands you WILL run during the interview demo. Practise these until they are second nature.",
@@ -894,7 +1103,7 @@ story.append(PageBreak())
 # ============================================================
 # SECTION 10 — Architecture Overview
 # ============================================================
-section_header(story, 10, "Architecture & Flow Summary", colors.HexColor("#1a3a5c"))
+section_header(story, 11, "Architecture & Flow Summary", colors.HexColor("#1a3a5c"))
 
 story.append(Paragraph("Full Request Flow — Trace Every Hop", h2))
 
@@ -954,7 +1163,7 @@ story.append(PageBreak())
 # ============================================================
 # SECTION 11 — Quick Reference Card
 # ============================================================
-section_header(story, 11, "Quick-Reference: What Does Each File Do?", colors.HexColor("#374151"))
+section_header(story, 12, "Quick-Reference: What Does Each File Do?", colors.HexColor("#374151"))
 
 qr_data = [
     ["File", "One-line purpose", "Key class/function"],
@@ -1025,7 +1234,7 @@ story.append(PageBreak())
 # ============================================================
 # FINAL PAGE — requirements + how to build/deploy
 # ============================================================
-section_header(story, 12, "Build, Deploy & Test — Step-by-Step", colors.HexColor("#0f4c81"))
+section_header(story, 13, "Build, Deploy & Test — Step-by-Step", colors.HexColor("#0f4c81"))
 
 steps_full = [
     ("Build the Docker image",

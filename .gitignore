@@ -44,3 +44,6 @@ assignemnt specifications/05wildfire-detection.zip
 
 # Logs
 *.log
+
+# Claude Code internal settings
+.claude/

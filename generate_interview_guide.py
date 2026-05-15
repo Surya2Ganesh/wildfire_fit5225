@@ -1103,7 +1103,159 @@ story.append(PageBreak())
 # ============================================================
 # SECTION 10 — Architecture Overview
 # ============================================================
-section_header(story, 11, "Architecture & Flow Summary", colors.HexColor("#1a3a5c"))
+section_header(story, 11, "How Did This Happen? From Which Code & Where", colors.HexColor("#1a3a5c"))
+
+story.append(Paragraph(
+    "Every behaviour the interviewer sees has an exact origin in a specific file and line. "
+    "This section maps each observable outcome back to the code that caused it.",
+    body))
+story.append(Spacer(1, 0.3*cm))
+
+# ── "From which code" master trace table ────────────────────────────────────
+story.append(Paragraph("Master Trace: Observable → File → Line → Why", h2))
+
+trace_data = [
+    ["What you observe", "Which file", "Which line / function", "Why it works that way"],
+
+    ["API starts when container boots",
+     "Dockerfile",
+     "Last line: CMD [\"uvicorn\", \"app.main:app\", ...]",
+     "Docker executes CMD on container start. uvicorn imports app/main.py and starts serving."],
+
+    ["Model loads once, not per request",
+     "app/main.py",
+     "Line: predictor = YoloPredictor(MODEL_PATH)  (module level, outside any function)",
+     "Python executes module-level code once when the file is imported. The predictor object lives for the lifetime of the process."],
+
+    ["YOLO model file is fire_m.pt",
+     "app/main.py",
+     "Line: MODEL_PATH = \"fire-models/fire_m.pt\"",
+     "Hardcoded path to the wildfire model. The file is copied into the container by Dockerfile COPY fire-models ./fire-models."],
+
+    ["GET / returns health message",
+     "app/main.py",
+     "def root(): return {\"message\": \"Wildfire Detection API is running\"}",
+     "The @app.get(\"/\") decorator registers this function as the handler for GET requests to /."],
+
+    ["POST /api/predict returns JSON with detections",
+     "app/main.py",
+     "async def predict(request: PredictionRequest)",
+     "The @app.post decorator registers this as the handler. FastAPI parses the JSON body into PredictionRequest automatically."],
+
+    ["Request body has uuid + image fields",
+     "app/schemas.py",
+     "class PredictionRequest(BaseModel): uuid: str, image: str",
+     "Pydantic BaseModel defines the expected JSON shape. FastAPI feeds incoming JSON into this class and rejects unknown or missing fields."],
+
+    ["Response has count, detections, boxes, speed_*",
+     "app/schemas.py",
+     "class PredictResponse(BaseModel)",
+     "FastAPI validates the dict returned by predict() against this schema before sending. If any field is missing it raises a 500 error."],
+
+    ["base64 string → OpenCV image",
+     "app/utils.py",
+     "def decode_base64_image(base64_str)",
+     "Called from main.py line: image = decode_base64_image(request.image). Three steps: b64decode → frombuffer → imdecode."],
+
+    ["Annotated image → base64 string",
+     "app/utils.py",
+     "def encode_image_to_base64(image)",
+     "Called from main.py in annotate(). imencode compresses array to JPEG bytes, b64encode makes it JSON-safe text."],
+
+    ["YOLO does not block other requests",
+     "app/main.py",
+     "result = await run_in_threadpool(predictor.predict, image)",
+     "run_in_threadpool() moves the CPU-bound call into a background thread. The async event loop awaits the future and handles other connections meanwhile."],
+
+    ["Only one YOLO inference at a time",
+     "app/predictor.py",
+     "self.lock = threading.Lock()  then  with self.lock: model.predict()",
+     "Multiple threads from run_in_threadpool would race on the model. The Lock serialises access: second thread blocks until first releases the lock."],
+
+    ["Detected class names are 'fire'/'smoke'",
+     "app/predictor.py",
+     "names = self.model.names  →  class_name = names[cls_id]",
+     "self.model.names is a dict {0: 'fire', 1: 'smoke'} built into the .pt file. cls_id comes from box.cls[0].item()."],
+
+    ["Boxes are x,y,width,height not x1,y1,x2,y2",
+     "app/predictor.py",
+     "x1,y1,x2,y2 = box.xyxy[0].tolist(); width=x2-x1; height=y2-y1",
+     "YOLO stores corners (xyxy). The spec requires top-left + size format so we convert: subtract x1 from x2 for width, y1 from y2 for height."],
+
+    ["Speed timings appear in response",
+     "app/predictor.py",
+     "speed = result.speed  →  speed.get('preprocess'), speed.get('inference'), speed.get('postprocess')",
+     "Ultralytics automatically populates result.speed with ms timings for each inference stage. We extract and return them as required by the spec."],
+
+    ["Annotated image has boxes drawn on it",
+     "app/predictor.py",
+     "def get_annotated_image(result): return result.plot()",
+     "result.plot() is a built-in Ultralytics method that renders all bounding boxes and labels onto the image using OpenCV drawing functions."],
+
+    ["Container uses python:3.11-slim base",
+     "Dockerfile",
+     "FROM python:3.11-slim",
+     "slim removes GUI tools and docs saving ~400 MB vs full image. Not alpine to avoid musl libc incompatibility with PyTorch."],
+
+    ["PyTorch is CPU-only",
+     "Dockerfile",
+     "pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu",
+     "The CPU wheel is ~300 MB vs ~2.5 GB for the CUDA version. OCI VMs have no GPU so CUDA would be wasted space."],
+
+    ["pip install runs before COPY app/",
+     "Dockerfile",
+     "COPY requirements_a1.txt .  then  RUN pip install  then  COPY app ./app",
+     "Docker layer caching: if only main.py changes, the pip install layer is reused from cache. Copying source after dependencies prevents a full reinstall on every code change."],
+
+    ["Pod only gets traffic after model loads",
+     "k8s/deployment.yaml",
+     "readinessProbe: httpGet path:/ initialDelaySeconds:20",
+     "Kubernetes waits 20s then polls GET /. Pod receives traffic only after the probe returns 200. YOLO loading takes ~20s so this prevents failed requests during startup."],
+
+    ["Pod restarts if FastAPI hangs",
+     "k8s/deployment.yaml",
+     "livenessProbe: httpGet path:/ initialDelaySeconds:30 periodSeconds:15",
+     "If GET / fails 3 consecutive checks Kubernetes kills and restarts the container. Self-healing without manual intervention."],
+
+    ["Each pod is capped at 1 vCPU",
+     "k8s/deployment.yaml",
+     "resources.limits.cpu: \"1\"  and  resources.requests.cpu: \"1\"",
+     "Requests = Limits → QoS class Guaranteed. K8s never evicts this pod first. The cap ensures benchmarking results are reproducible: each pod gets exactly 1 CPU."],
+
+    ["Traffic is routed to port 30080",
+     "k8s/service.yaml",
+     "type: NodePort  nodePort: 30080  targetPort: 8000",
+     "NodePort opens 30080 on every node. kube-proxy intercepts packets and forwards them to whichever pod's port 8000. If replicas > 1, traffic is distributed round-robin."],
+
+    ["Locust image is loaded once not per request",
+     "locust/locustfile.py",
+     "IMAGE_B64 = load_image_base64()  (module level)",
+     "Python executes this when Locust imports the file. All 100+ virtual users share the same pre-encoded string. Prevents encoding CPU work from skewing latency measurements."],
+
+    ["Locust sends 3x more predict than annotate",
+     "locust/locustfile.py",
+     "@task(3) def predict()  and  @task(1) def annotate()",
+     "Locust picks tasks proportionally to their weights. 3+1=4 total weight, so predict is chosen 75% of the time. Reflects that prediction is the primary use case."],
+]
+
+tt = Table(trace_data, colWidths=[3.5*cm, 3*cm, 4*cm, 5.9*cm])
+tt.setStyle(TableStyle([
+    ("BACKGROUND",    (0,0), (-1,0), DARK_BLUE),
+    ("TEXTCOLOR",     (0,0), (-1,0), WHITE),
+    ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+    ("FONTSIZE",      (0,0), (-1,-1), 7.5),
+    ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, GREY_BG]),
+    ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5e1")),
+    ("VALIGN",        (0,0), (-1,-1), "TOP"),
+    ("TOPPADDING",    (0,0), (-1,-1), 4),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("LEFTPADDING",   (0,0), (-1,-1), 4),
+]))
+story.append(tt)
+story.append(PageBreak())
+
+# ── Full request flow ────────────────────────────────────────────────────────
+section_header(story, "11b", "Architecture & Flow Summary", colors.HexColor("#1a3a5c"))
 
 story.append(Paragraph("Full Request Flow — Trace Every Hop", h2))
 

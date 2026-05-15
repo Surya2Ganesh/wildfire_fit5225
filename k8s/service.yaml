@@ -1,16 +1,44 @@
-# Service exposes the pod on a stable NodePort for local access.
-apiVersion: v1
-kind: Service
+# FILE: k8s/service.yaml
+# ROLE: Tells Kubernetes HOW to expose the wildfire API pods to the outside world.
+#       A Service gives the pods a stable network address. Without a Service,
+#       pod IPs change every time a pod restarts — clients would lose connection.
+#
+# HOW TO APPLY:  kubectl apply -f k8s/service.yaml
+# HOW TO CHECK:  kubectl get services
+#                kubectl describe service wildfire-api-service
+#
+# TRAFFIC FLOW:
+#   External client
+#     → http://<NODE_IP>:30080          (NodePort on the host machine)
+#     → kube-proxy intercepts the packet
+#     → routes to pod's ClusterIP:8000  (randomly picks one pod if replicas > 1)
+#     → FastAPI in the container handles the request
+
+apiVersion: v1      # Core Kubernetes API version (Services are in the core API group)
+kind: Service       # The type of Kubernetes resource this file defines
+
 metadata:
-  name: wildfire-api-service
+  name: wildfire-api-service   # Name used in: kubectl describe service wildfire-api-service
+
 spec:
+  # NodePort: opens a port on EVERY node in the cluster (including master).
+  # Any request arriving on that port on any node is routed to the pods.
+  # Alternative types:
+  #   ClusterIP    — internal only, no external access (default)
+  #   LoadBalancer — creates a cloud load balancer (needs cloud provider support)
   type: NodePort
-  # Forward traffic only to pods created by the wildfire-api deployment.
+
+  # selector: the Service routes traffic ONLY to pods that have this label.
+  # Must match the labels in deployment.yaml → spec.template.metadata.labels
+  # This is how the Service knows which pods belong to this deployment.
   selector:
     app: wildfire-api
+
   ports:
-    # External port 30080 forwards to container port 8000.
     - protocol: TCP
-      port: 80
-      targetPort: 8000
-      nodePort: 30080
+      port: 80           # The ClusterIP port (internal cluster traffic uses this)
+      targetPort: 8000   # The container port where uvicorn listens (defined in deployment.yaml)
+      nodePort: 30080    # The external port opened on every node
+                         # Must be in range 30000-32767 (Kubernetes default NodePort range)
+                         # Access the API at: http://127.0.0.1:30080 (Docker Desktop)
+                         # or http://<OCI_NODE_IP>:30080 (real cluster)

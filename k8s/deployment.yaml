@@ -1,47 +1,84 @@
-# Deployment keeps the wildfire API pod running inside Kubernetes.
-apiVersion: apps/v1
-kind: Deployment
+# FILE: k8s/deployment.yaml
+# ROLE: Tells Kubernetes HOW to run the wildfire API container.
+#       A Deployment manages a set of identical pods and ensures the desired
+#       number of replicas is always running. If a pod crashes, K8s restarts it.
+#
+# HOW TO APPLY:  kubectl apply -f k8s/deployment.yaml
+# HOW TO SCALE:  kubectl scale deployment wildfire-api --replicas=4
+# HOW TO CHECK:  kubectl get pods
+#                kubectl describe deployment wildfire-api
+
+apiVersion: apps/v1   # The Kubernetes API version for Deployment objects
+kind: Deployment       # The type of Kubernetes resource this file defines
+
 metadata:
-  name: wildfire-api
+  name: wildfire-api   # The name used in all kubectl commands (e.g. kubectl get deployment wildfire-api)
   labels:
-    app: wildfire-api
+    app: wildfire-api  # Labels are key-value tags used to organise and select resources
+
 spec:
-  # Run one replica for this assignment setup.
+  # Number of pod replicas to run simultaneously.
+  # Change this for benchmarking: 1 → 2 → 4 → 8
+  # Each replica gets its own copy of the container and YOLO model.
   replicas: 1
+
+  # selector tells the Deployment which pods it owns and manages.
+  # It finds pods by matching their labels. MUST match the pod template labels below.
   selector:
     matchLabels:
-      app: wildfire-api
+      app: wildfire-api   # owns pods that have the label app=wildfire-api
+
+  # template defines what each pod looks like (the blueprint for every replica)
   template:
     metadata:
       labels:
-        app: wildfire-api
+        app: wildfire-api   # MUST match selector.matchLabels above
+
     spec:
       containers:
-        - name: wildfire-api
-          # Use the locally built image tag.
+        - name: wildfire-api          # name of the container inside the pod
+          # The Docker image to run — built with: docker build -t wildfire-api:latest .
+          # IfNotPresent means: use the locally cached image, don't pull from a registry
           image: wildfire-api:latest
           imagePullPolicy: IfNotPresent
+
           ports:
-            - containerPort: 8000
+            - containerPort: 8000   # the port uvicorn listens on INSIDE the container
+                                    # the Service maps external port 30080 → this port
+
           resources:
-            # Reserve and cap enough CPU/RAM for model inference.
+            # requests: the minimum resources Kubernetes GUARANTEES this pod
+            # K8s scheduler uses this to decide which node can host the pod
             requests:
-              cpu: "1"
-              memory: "2Gi"
+              cpu:    "1"     # 1 full vCPU — required by the assignment spec
+              memory: "2Gi"   # 2 Gibibytes — enough for YOLO model + PyTorch tensors
+
+            # limits: the MAXIMUM the pod can consume
+            # If it exceeds CPU limit → throttled (slowed down)
+            # If it exceeds memory limit → killed and restarted (OOMKilled)
+            # Setting requests == limits → QoS class "Guaranteed" (never evicted first)
             limits:
-              cpu: "1"
+              cpu:    "1"
               memory: "2Gi"
+
+          # readinessProbe: Kubernetes checks this before routing traffic to the pod.
+          # The pod only receives requests once this probe returns HTTP 200.
+          # WHY IMPORTANT: YOLO model takes ~20 seconds to load into memory.
+          # Without this probe, K8s would send requests to a pod still initialising
+          # → the requests would fail. The probe prevents that.
           readinessProbe:
-            # The pod is considered ready when the root endpoint responds.
             httpGet:
-              path: /
+              path: /      # hits the GET / health endpoint defined in app/main.py
               port: 8000
-            initialDelaySeconds: 20
-            periodSeconds: 10
+            initialDelaySeconds: 20   # wait 20s after container starts before first check
+            periodSeconds: 10         # check every 10 seconds
+
+          # livenessProbe: Kubernetes checks this periodically while the pod runs.
+          # If it fails 3 times in a row, Kubernetes RESTARTS the container automatically.
+          # Catches cases where FastAPI/uvicorn has hung or deadlocked.
           livenessProbe:
-            # Restart the container if the API stops responding.
             httpGet:
               path: /
               port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 15
+            initialDelaySeconds: 30   # wait longer than readiness before first liveness check
+            periodSeconds: 15         # check every 15 seconds

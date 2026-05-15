@@ -1,0 +1,1 @@
+terraform apply -var="instance_state=RUNNING" -auto-approve

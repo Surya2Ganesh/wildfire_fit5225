@@ -1,0 +1,13 @@
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+image_b64.txt
+demo-videos
+dalle-logos
+pages
+training-recipes
+src

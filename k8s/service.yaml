@@ -1,0 +1,16 @@
+# Service exposes the pod on a stable NodePort for local access.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wildfire-api-service
+spec:
+  type: NodePort
+  # Forward traffic only to pods created by the wildfire-api deployment.
+  selector:
+    app: wildfire-api
+  ports:
+    # External port 30080 forwards to container port 8000.
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+      nodePort: 30080

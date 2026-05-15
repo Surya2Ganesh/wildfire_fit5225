@@ -1,0 +1,47 @@
+# Deployment keeps the wildfire API pod running inside Kubernetes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wildfire-api
+  labels:
+    app: wildfire-api
+spec:
+  # Run one replica for this assignment setup.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wildfire-api
+  template:
+    metadata:
+      labels:
+        app: wildfire-api
+    spec:
+      containers:
+        - name: wildfire-api
+          # Use the locally built image tag.
+          image: wildfire-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          resources:
+            # Reserve and cap enough CPU/RAM for model inference.
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          readinessProbe:
+            # The pod is considered ready when the root endpoint responds.
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            # Restart the container if the API stops responding.
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15

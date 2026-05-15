@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+*.env
+
+# Terraform state (contains sensitive data)
+teraform/.terraform/
+teraform/*.tfstate
+teraform/*.tfstate.backup
+teraform/.terraform.lock.hcl
+teraform/terraform.tfvars
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large assignment files
+assignemnt specifications/05wildfire-detection.zip
+
+# Logs
+*.log

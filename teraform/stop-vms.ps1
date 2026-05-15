@@ -1,0 +1,1 @@
+terraform apply -var="instance_state=STOPPED" -auto-approve

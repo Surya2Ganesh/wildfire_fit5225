@@ -3,38 +3,33 @@
 
 ---
 
-## 1. PROJECT SETUP (Local Machine)
+## START EVERYTHING (One Command)
 
-### Navigate to project
-```
-cd C:\Users\surya\OneDrive\Desktop\wildfire-detection
-```
-
-### Install Python dependencies (local testing only)
-```
-pip install -r requirements_a1.txt
+```powershell
+.\start_wildfire.ps1
 ```
 
-### Run API locally (without Docker)
-```
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
+**What this script does automatically (7 steps):**
+1. Starts Docker Desktop (skips if already running)
+2. Waits for Docker engine to become ready (polls every 5s, up to 5 min)
+3. Navigates to the project folder
+4. Activates the Python virtual environment (`venv\Scripts\Activate.ps1`)
+5. Waits for the Kubernetes cluster to become ready (polls every 10s)
+6. Runs `kubectl apply -f k8s/deployment.yaml` and `kubectl apply -f k8s/service.yaml`
+7. Scales to 1 replica, waits 15 seconds, then opens `http://127.0.0.1:30080/docs`
 
-### Test API is running (local)
-```
-curl http://localhost:8000/
-```
+> After the script finishes, the API is live at **http://127.0.0.1:30080**
 
 ---
 
-## 2. DOCKER — Build & Run Container
+## 1. DOCKER — Build & Manage Image
 
-### Build the Docker image
+### Build the image (run once, or after code changes)
 ```
 docker build -t wildfire-api:latest .
 ```
 
-### Run the container locally
+### Run container locally (without Kubernetes)
 ```
 docker run -p 8000:8000 wildfire-api:latest
 ```
@@ -52,8 +47,6 @@ docker ps
 ### View container logs
 ```
 docker logs wildfire
-```
-```
 docker logs wildfire -f
 ```
 
@@ -68,134 +61,89 @@ docker rm wildfire
 docker images
 ```
 
-### Remove Docker image
+### Remove the image
 ```
 docker rmi wildfire-api:latest
 ```
 
 ---
 
-## 3. DOCKER — Load Image onto Kubernetes Nodes
+## 2. DOCKER — Load Image onto Kubernetes Nodes
 
 ### Save image to a tar file
 ```
 docker save wildfire-api:latest -o wildfire-api.tar
 ```
 
-### Copy and load onto master node
+### Copy and load onto each node
 ```
 scp wildfire-api.tar ubuntu@<MASTER_IP>:~/
 ssh ubuntu@<MASTER_IP> "docker load -i wildfire-api.tar"
-```
 
-### Copy and load onto worker1
-```
 scp wildfire-api.tar ubuntu@<WORKER1_IP>:~/
 ssh ubuntu@<WORKER1_IP> "docker load -i wildfire-api.tar"
-```
 
-### Copy and load onto worker2
-```
 scp wildfire-api.tar ubuntu@<WORKER2_IP>:~/
 ssh ubuntu@<WORKER2_IP> "docker load -i wildfire-api.tar"
 ```
 
 ---
 
-## 4. KUBERNETES — Setup Cluster (Run on VMs via SSH)
+## 3. KUBERNETES — Deploy the Application
 
-### SSH into master node
-```
-ssh ubuntu@<MASTER_IP>
-```
-
-### SSH into worker nodes
-```
-ssh ubuntu@<WORKER1_IP>
-ssh ubuntu@<WORKER2_IP>
-```
-
-### Install kubectl (on master)
-```
-sudo apt-get update
-sudo apt-get install -y kubectl
-```
-
-### Check cluster is working
-```
-kubectl cluster-info
-```
-
-### Check all nodes are Ready
-```
-kubectl get nodes
-```
-
----
-
-## 5. KUBERNETES — Deploy the Application
-
-### Apply deployment manifest
-```
-kubectl apply -f k8s/deployment.yaml
-```
-
-### Apply service manifest
-```
-kubectl apply -f k8s/service.yaml
-```
-
-### Apply both at once
+### Apply both manifests at once
 ```
 kubectl apply -f k8s/
 ```
 
-### Check pods are running
+### Or apply individually
 ```
-kubectl get pods
-```
-
-### Check pods with node placement
-```
-kubectl get pods -o wide
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
 ```
 
-### Check deployments
-```
-kubectl get deployments
-```
-
-### Check services (find NodePort)
-```
-kubectl get services
-```
-
-### Check all resources at once
+### Check everything is running
 ```
 kubectl get all
 ```
 
 ---
 
-## 6. KUBERNETES — Scaling (Benchmarking)
+## 4. KUBERNETES — Check Status
 
-### Scale to 1 pod
+### See pods (are they Running?)
+```
+kubectl get pods
+```
+
+### See pods + which node they are on
+```
+kubectl get pods -o wide
+```
+
+### See deployments
+```
+kubectl get deployments
+```
+
+### See services (find NodePort 30080)
+```
+kubectl get services
+```
+
+### See nodes (are they Ready?)
+```
+kubectl get nodes
+```
+
+---
+
+## 5. KUBERNETES — Scaling (Benchmarking)
+
 ```
 kubectl scale deployment wildfire-api --replicas=1
-```
-
-### Scale to 2 pods
-```
 kubectl scale deployment wildfire-api --replicas=2
-```
-
-### Scale to 4 pods
-```
 kubectl scale deployment wildfire-api --replicas=4
-```
-
-### Scale to 8 pods
-```
 kubectl scale deployment wildfire-api --replicas=8
 ```
 
@@ -206,134 +154,110 @@ kubectl get pods -w
 
 ---
 
-## 7. KUBERNETES — Monitoring & Debugging
+## 6. KUBERNETES — Logs & Debugging
 
 ### View pod logs
 ```
 kubectl logs <pod-name>
-```
-
-### Stream pod logs live
-```
 kubectl logs <pod-name> -f
 ```
 
-### Describe a pod (see events, probes, errors)
+### Describe a pod (shows events, probe results, errors)
 ```
 kubectl describe pod <pod-name>
 ```
 
-### Describe the deployment
+### Describe deployment or service
 ```
 kubectl describe deployment wildfire-api
-```
-
-### Describe the service
-```
 kubectl describe service wildfire-api-service
 ```
 
-### View cluster events (sorted by time)
+### View cluster events sorted by time
 ```
 kubectl get events --sort-by='.lastTimestamp'
 ```
 
-### Check CPU and memory usage per pod
+### CPU and memory usage
 ```
 kubectl top pods
-```
-
-### Check node resource usage
-```
 kubectl top nodes
-```
-
-### Get pod name (to copy for other commands)
-```
-kubectl get pods -o name
 ```
 
 ---
 
-## 8. KUBERNETES — Delete / Cleanup
+## 7. KUBERNETES — Cleanup
 
-### Delete deployment
-```
-kubectl delete deployment wildfire-api
-```
-
-### Delete service
-```
-kubectl delete service wildfire-api-service
-```
-
-### Delete everything from k8s folder
 ```
 kubectl delete -f k8s/
 ```
 
+Or individually:
+```
+kubectl delete deployment wildfire-api
+kubectl delete service wildfire-api-service
+```
+
 ---
 
-## 9. TEST THE API
+## 8. TEST THE API
 
-### Test health endpoint (replace with your node IP)
+### Health check
 ```
-curl http://<NODE_IP>:30080/
+curl http://127.0.0.1:30080/
 ```
 
-### Run the manual test script (1 request to /api/predict)
+### Run the manual test script (sends one real image to /api/predict)
 ```
 python scripts/test_request.py
 ```
 
-### Test /api/predict with curl (example)
+### Open Swagger UI in browser
 ```
-curl -X POST http://<NODE_IP>:30080/api/predict \
-  -H "Content-Type: application/json" \
-  -d "{\"uuid\":\"test-123\",\"image\":\"$(base64 demo-images/image0.jpeg | tr -d '\n')\"}"
-```
-
-### Open API docs in browser
-```
-http://<NODE_IP>:30080/docs
+http://127.0.0.1:30080/docs
 ```
 
 ---
 
-## 10. LOCUST — Load Testing
+## 9. LOCUST — Load Testing
 
-### Run Locust (opens web UI at localhost:8089)
+### Start Locust with web UI (then open browser at localhost:8089)
 ```
-locust -f locust/locustfile.py --host http://<NODE_IP>:30080
-```
-
-### Run Locust headless (no browser, auto-start)
-```
-locust -f locust/locustfile.py --host http://<NODE_IP>:30080 \
-  --headless --users 10 --spawn-rate 2 --run-time 60s
+locust -f locust/locustfile.py --host http://127.0.0.1:30080
 ```
 
-### Run with 50 users, spawn 5 per second, run 2 minutes
+### Headless mode (no browser needed)
 ```
-locust -f locust/locustfile.py --host http://<NODE_IP>:30080 \
-  --headless --users 50 --spawn-rate 5 --run-time 2m
+locust -f locust/locustfile.py --host http://127.0.0.1:30080 --headless --users 10 --spawn-rate 2 --run-time 60s
 ```
 
-### Open Locust web UI (after starting Locust)
+### Example benchmark runs used in the report
 ```
-http://localhost:8089
+# 1 pod — ramp up users until breaking point
+locust -f locust/locustfile.py --host http://127.0.0.1:30080
+
+# Scale to 2 pods, then run again
+kubectl scale deployment wildfire-api --replicas=2
+locust -f locust/locustfile.py --host http://127.0.0.1:30080
+
+# Scale to 4 pods, then run again
+kubectl scale deployment wildfire-api --replicas=4
+locust -f locust/locustfile.py --host http://127.0.0.1:30080
+
+# Scale to 8 pods, then run again
+kubectl scale deployment wildfire-api --replicas=8
+locust -f locust/locustfile.py --host http://127.0.0.1:30080
 ```
 
 ---
 
-## 11. TERRAFORM (IaC) — OCI Infrastructure
+## 10. TERRAFORM — OCI Infrastructure
 
-### Navigate to terraform folder
 ```
 cd teraform
 ```
 
-### Initialise (download OCI provider plugin)
+### Initialise (first time only — downloads OCI provider)
 ```
 terraform init
 ```
@@ -343,24 +267,14 @@ terraform init
 terraform plan
 ```
 
-### Create all OCI resources (VMs, network, etc.)
+### Create VMs + networking on OCI
 ```
 terraform apply
 ```
 
-### Create without confirmation prompt
-```
-terraform apply -auto-approve
-```
-
-### Get VM IP addresses after creation
+### Get VM public IPs after creation
 ```
 terraform output
-```
-
-### Show current infrastructure state
-```
-terraform show
 ```
 
 ### Start stopped VMs
@@ -368,7 +282,7 @@ terraform show
 .\start-vms.ps1
 ```
 
-### Stop VMs (save costs)
+### Stop VMs (save OCI credits)
 ```
 .\stop-vms.ps1
 ```
@@ -383,115 +297,76 @@ terraform destroy
 
 ---
 
-## 12. GIT — Version Control
+## 11. GIT — Push Updates to GitHub
 
-### Check status
-```
-git status
-```
-
-### Add all changes
 ```
 git add .
-```
-
-### Commit with message
-```
-git commit -m "your message here"
-```
-
-### Push to GitHub
-```
+git commit -m "your message"
 git push origin main
 ```
 
-### Pull latest from GitHub
+### Check what changed
 ```
-git pull origin main
-```
-
-### Check commit history
-```
+git status
 git log --oneline
-```
-
-### Check remote URL
-```
-git remote -v
 ```
 
 ---
 
-## 13. FULL START-TO-FINISH DEMO SEQUENCE
+## 12. FULL INTERVIEW DEMO SEQUENCE
 
-### Step 1 — Show cluster is healthy
-```
+```powershell
+# 1 — Start everything
+.\start_wildfire.ps1
+
+# 2 — Confirm cluster is healthy
 kubectl get nodes
-```
 
-### Step 2 — Show pods are running
-```
+# 3 — Confirm pods are running
 kubectl get pods -o wide
-```
 
-### Step 3 — Show service and port
-```
+# 4 — Confirm service is exposed
 kubectl get services
-```
 
-### Step 4 — Hit the health endpoint
-```
-curl http://<NODE_IP>:30080/
-```
+# 5 — Hit the health endpoint
+curl http://127.0.0.1:30080/
 
-### Step 5 — Run a real inference test
-```
+# 6 — Run a real inference request
 python scripts/test_request.py
-```
 
-### Step 6 — Start load test
-```
-locust -f locust/locustfile.py --host http://<NODE_IP>:30080
-```
+# 7 — Start load test (open http://localhost:8089)
+locust -f locust/locustfile.py --host http://127.0.0.1:30080
 
-### Step 7 — Scale pods during load test
-```
+# 8 — Scale pods while load test runs
 kubectl scale deployment wildfire-api --replicas=4
-```
 
-### Step 8 — Watch new pods come up
-```
+# 9 — Watch new pods come up
 kubectl get pods -w
 ```
 
 ---
 
-## 14. QUICK COMMAND LOOKUP
+## QUICK LOOKUP TABLE
 
-| What you want to do              | Command                                              |
-|----------------------------------|------------------------------------------------------|
-| Build Docker image               | `docker build -t wildfire-api:latest .`              |
-| Run container locally            | `docker run -p 8000:8000 wildfire-api:latest`        |
-| Deploy to Kubernetes             | `kubectl apply -f k8s/`                              |
-| Check pods                       | `kubectl get pods`                                   |
-| Check services                   | `kubectl get services`                               |
-| Scale to 4 pods                  | `kubectl scale deployment wildfire-api --replicas=4` |
-| View pod logs                    | `kubectl logs <pod-name>`                            |
-| Debug a pod                      | `kubectl describe pod <pod-name>`                    |
-| Test API manually                | `python scripts/test_request.py`                     |
-| Start Locust load test           | `locust -f locust/locustfile.py --host http://...`   |
-| Provision OCI infrastructure     | `cd teraform && terraform apply`                     |
-| Destroy OCI infrastructure       | `cd teraform && terraform destroy`                   |
-| Push code to GitHub              | `git add . && git commit -m "msg" && git push`       |
+| Task                          | Command                                                    |
+|-------------------------------|------------------------------------------------------------|
+| Start everything              | `.\start_wildfire.ps1`                                     |
+| Build Docker image            | `docker build -t wildfire-api:latest .`                    |
+| Deploy to Kubernetes          | `kubectl apply -f k8s/`                                    |
+| Check pods                    | `kubectl get pods`                                         |
+| Check services                | `kubectl get services`                                     |
+| Scale to N pods               | `kubectl scale deployment wildfire-api --replicas=N`       |
+| View pod logs                 | `kubectl logs <pod-name>`                                  |
+| Debug a pod                   | `kubectl describe pod <pod-name>`                          |
+| Test API manually             | `python scripts/test_request.py`                           |
+| Open Swagger docs             | `http://127.0.0.1:30080/docs`                              |
+| Start Locust load test        | `locust -f locust/locustfile.py --host http://...`         |
+| Provision OCI VMs             | `cd teraform && terraform apply`                           |
+| Destroy OCI VMs               | `cd teraform && terraform destroy`                         |
+| Push code to GitHub           | `git add . && git commit -m "msg" && git push`             |
 
 ---
 
-## IMPORTANT NOTES
-
-- Replace `<NODE_IP>` with the actual public IP of your master or any worker node
-- Replace `<MASTER_IP>`, `<WORKER1_IP>`, `<WORKER2_IP>` with actual OCI VM public IPs (from `terraform output`)
-- The API is always exposed on port **30080** (NodePort)
-- The container runs on port **8000** internally
-- Each pod is limited to **1 vCPU and 2Gi RAM** (set in k8s/deployment.yaml)
-- `terraform.tfvars` is NOT committed to GitHub — it contains your OCI credentials
-- Run all kubectl commands from your **local machine** (not inside the VM), with your kubeconfig set up
+> **Port reference:** Container runs on `8000` internally → NodePort exposes it as `30080` externally
+> **Resource limits:** Each pod = 1 vCPU + 2Gi RAM (defined in `k8s/deployment.yaml`)
+> **Model:** `fire-models/fire_m.pt` — detects **Fire** and **Smoke**

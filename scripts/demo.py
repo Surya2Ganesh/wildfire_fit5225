@@ -18,7 +18,12 @@ import subprocess
 import sys
 
 API_BASE = "http://127.0.0.1:30080"
-IMAGE_PATH = "demo-images/image0.jpeg"
+
+# Use image from command line if provided, otherwise default to image0.jpeg
+# Usage:  python scripts/demo.py
+#         python scripts/demo.py demo-images/image1.jpeg
+#         python scripts/demo.py C:\Users\surya\Desktop\anyimage.jpg
+IMAGE_PATH  = sys.argv[1] if len(sys.argv) > 1 else "demo-images/image0.jpeg"
 OUTPUT_PATH = "demo-images/annotated_output.jpg"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -44,6 +49,11 @@ def open_image(path):
 # ── main demo ─────────────────────────────────────────────────────────────────
 print("\n  CloudEco Wildfire Detection API — Live Demo")
 print("  Model: fire-models/fire_m.pt  |  Classes: fire, smoke")
+
+# Show all available demo images so you can pick one during the interview
+available = sorted([f for f in os.listdir("demo-images") if f.endswith((".jpg", ".jpeg", ".png"))])
+print(f"\n  Available images: {', '.join(available)}")
+print(f"  Using image    : {IMAGE_PATH}")
 
 # Step 0 — health check
 separator("STEP 1 — Health Check  (GET /)")

@@ -1,0 +1,30 @@
+# Kubernetes Service exposes the wildfire-api pods.
+# NodePort allows external traffic through a fixed port on each VM node.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: wildfire-api-service
+  namespace: cloudeco
+
+spec:
+  type: NodePort
+
+  # Selector connects this Service to pods with label app=wildfire-api.
+  selector:
+    app: wildfire-api
+
+  ports:
+    - name: http
+      protocol: TCP
+
+      # Service port inside Kubernetes.
+      port: 80
+
+      # Container port where FastAPI is running.
+      targetPort: 8000
+
+      # External port opened on the Oracle VM nodes.
+      # Public URL later:
+      # http://<public-ip>:30080/health
+      nodePort: 30080

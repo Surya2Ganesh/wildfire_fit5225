@@ -1,0 +1,26 @@
+# ============================================================
+# FIT5225 Assignment 1 - OCI Terraform Provider
+# ============================================================
+
+terraform {
+  required_version = ">= 1.6.0"
+
+  required_providers {
+    oci = {
+      source  = "oracle/oci"
+      version = ">= 6.0.0"
+    }
+  }
+}
+
+# Oracle Cloud Infrastructure provider configuration.
+# These values come from terraform.tfvars, which should NOT be submitted with
+# real private keys or secret account details.
+provider "oci" {
+  tenancy_ocid     = var.tenancy_ocid
+  user_ocid        = var.user_ocid
+  fingerprint      = var.fingerprint
+  private_key_path = var.private_key_path
+  region           = var.region
+}
+

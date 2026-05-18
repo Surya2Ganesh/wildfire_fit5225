@@ -1,0 +1,25 @@
+# ============================================================
+# Example Terraform variables for FIT5225 OCI deployment.
+# Rename this file to terraform.tfvars and fill in your real values.
+# Do NOT submit real private keys or secret values publicly.
+# ============================================================
+
+tenancy_ocid     = "ocid1.tenancy.oc1..example"
+user_ocid        = "ocid1.user.oc1..example"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "C:/Users/surya/.oci/oci_api_key.pem"
+
+region           = "ap-melbourne-1"
+compartment_ocid = "ocid1.compartment.oc1..example"
+
+ssh_public_key_path = "C:/Users/surya/OneDrive/Desktop/oraclekey/fit5225_oci_key.pub"
+
+student_id = "35415940"
+
+vcn_cidr           = "10.0.0.0/16"
+public_subnet_cidr = "10.0.0.0/24"
+
+instance_shape     = "VM.Standard.E5.Flex"
+instance_ocpus     = 4
+instance_memory_gb = 8
+

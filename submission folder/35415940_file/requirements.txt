@@ -1,0 +1,20 @@
+# Web API framework
+fastapi
+
+# ASGI server used to run FastAPI
+uvicorn[standard]
+
+# YOLO object detection library
+ultralytics
+
+# Headless OpenCV is used for image decoding/encoding inside containers
+opencv-python-headless
+
+# Numerical operations for image arrays
+numpy
+
+# Request/response data validation
+pydantic
+
+# Useful for form/file support if needed later
+python-multipart

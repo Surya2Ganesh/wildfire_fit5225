@@ -1,0 +1,30 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment should never go inside Docker image
+.venv/
+venv/
+
+# Git files are not needed in the image
+.git/
+.gitignore
+
+# Local test outputs
+tests/
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+
+# Report/assets not needed for API runtime
+report-assets/
+pages/
+training-recipes/
+demo-videos/

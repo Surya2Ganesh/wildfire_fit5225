@@ -1,0 +1,6 @@
+# Namespace keeps all assignment Kubernetes resources grouped together.
+# This makes it easier to view, manage, and delete only this project's resources.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudeco

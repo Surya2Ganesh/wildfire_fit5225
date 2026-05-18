@@ -1,0 +1,71 @@
+# Kubernetes Deployment for the CloudEco wildfire detection API.
+# A Deployment manages replicas of the FastAPI container.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wildfire-api
+  namespace: cloudeco
+  labels:
+    app: wildfire-api
+
+spec:
+  # Start with 1 replica for baseline testing.
+  # Later, we will scale this to 2, 4, and 6 pods for Locust benchmarking.
+  replicas: 1
+
+  # Selector tells Kubernetes which pods belong to this Deployment.
+  selector:
+    matchLabels:
+      app: wildfire-api
+
+  template:
+    metadata:
+      labels:
+        app: wildfire-api
+
+    spec:
+      containers:
+        - name: wildfire-api
+
+          # Docker Hub image pushed from your laptop.
+          image: suryaganesh2210/wildfire-api:latest
+
+          # Always pull latest image during deployment.
+          imagePullPolicy: Always
+
+          # FastAPI listens on port 8000 inside the container.
+          ports:
+            - containerPort: 8000
+
+          # Resource control is required by the assignment.
+          # Each pod is limited to exactly 1 vCPU.
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "1"
+              memory: "4Gi"
+
+          # Liveness probe checks if the container is still alive.
+          # If this fails repeatedly, Kubernetes restarts the pod.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Readiness probe checks if the app is ready to receive traffic.
+          # Kubernetes will not send traffic to the pod until this succeeds.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

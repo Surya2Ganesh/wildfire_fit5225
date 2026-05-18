@@ -1,0 +1,3 @@
+# Dependencies for the included test scripts and Locust load testing.
+requests
+locust

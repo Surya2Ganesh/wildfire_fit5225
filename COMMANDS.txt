@@ -6,6 +6,7 @@
 ## START EVERYTHING (One Command)
 
 ```powershell
+cd "C:\Users\surya\OneDrive\Desktop\wildfire-detection"
 .\start_wildfire.ps1
 ```
 

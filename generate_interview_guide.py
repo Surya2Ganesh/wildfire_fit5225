@@ -156,8 +156,11 @@ def qa(story, question, answer):
 
 def code_block(story, label, lines):
     story.append(Paragraph(label, code_lbl))
+    parts = []
     for line in lines:
-        story.append(Paragraph(line.replace(" ", "&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), code))
+        escaped = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        parts.append(escaped.replace(" ", "&nbsp;") if escaped else "&nbsp;")
+    story.append(Paragraph("<br/>".join(parts), code))
 
 section_header(story, 1, "app/main.py — FastAPI Entry Point", DARK_BLUE)
 
